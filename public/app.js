@@ -206,5 +206,26 @@ function registerPeerConnectionListeners() {
         `ICE connection state change: ${peerConnection.iceConnectionState}`);
   });
 }
+document.querySelector('#screenShareBtn').addEventListener('click', startScreenSharing);
+
+async function startScreenSharing() {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    // Use screenStream for screen sharing
+    console.log('Screen sharing started');
+    
+    // Assuming you have a peer connection instance
+    screenStream.getTracks().forEach(track => {
+      peerConnection.addTrack(track, screenStream);
+    });
+
+    // You can stop screen sharing when needed
+    // screenStream.getTracks().forEach(track => track.stop());
+  } catch (error) {
+    console.error('Error accessing screen:', error);
+  }
+}
+
+// Your existing JavaScript code
 
 init();
