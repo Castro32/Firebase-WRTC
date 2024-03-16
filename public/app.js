@@ -1,6 +1,7 @@
+// Initialize Material Design Components
 mdc.ripple.MDCRipple.attachTo(document.querySelector('.mdc-button'));
 
-// DEfault configuration - Change these if you have a different STUN or TURN server.
+// Default configuration for ICE servers
 const configuration = {
   iceServers: [
     {
@@ -13,154 +14,136 @@ const configuration = {
   iceCandidatePoolSize: 10,
 };
 
-let peerConnection = null;
-let localStream = null;
-let remoteStream = null;
-let roomDialog = null;
-let roomId = null;
+let peerConnection = null; // PeerConnection instance
+let localStream = null; // Local stream (user's camera and microphone)
+let remoteStream = null; // Remote stream (stream received from another peer)
+let roomDialog = null; // Dialog for room joining
+let roomId = null; // Current room ID
 
+// Function to initialize the application
 function init() {
+  // Event listeners for buttons
   document.querySelector('#cameraBtn').addEventListener('click', openUserMedia);
   document.querySelector('#hangupBtn').addEventListener('click', hangUp);
   document.querySelector('#createBtn').addEventListener('click', createRoom);
   document.querySelector('#joinBtn').addEventListener('click', joinRoom);
+  // Initialize room dialog
   roomDialog = new mdc.dialog.MDCDialog(document.querySelector('#room-dialog'));
 }
 
+// Function to create a new room
 async function createRoom() {
+  // Disable create and join buttons while creating the room
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
-  const db = firebase.firestore();
+  const db = firebase.firestore(); // Firestore instance
 
-  console.log('Create PeerConnection with configuration: ', configuration);
+  // Create a new PeerConnection with default configuration
   peerConnection = new RTCPeerConnection(configuration);
-
+  // Register event listeners for PeerConnection
   registerPeerConnectionListeners();
 
-  // Add code for creating a room here
+  // Create an offer to establish a connection
   const offer = await peerConnection.createOffer();
-await peerConnection.setLocalDescription(offer);
+  await peerConnection.setLocalDescription(offer);
 
-const roomWithOffer = {
+  // Store the offer in Firestore to share with the other peer
+  const roomWithOffer = {
     offer: {
-        type: offer.type,
-        sdp: offer.sdp
+      type: offer.type,
+      sdp: offer.sdp
     }
-}
-const roomRef = await db.collection('rooms').add(roomWithOffer);
-const roomId = roomRef.id;
-document.querySelector('#currentRoom').innerText = `Current room is ${roomId} - You are the caller!`
-  // Code for creating room above
+  }
+  const roomRef = await db.collection('rooms').add(roomWithOffer);
+  roomId = roomRef.id; 
   
+  console.log("Room ID:", roomId);
+ 
+  // Store the room ID
+  // Display the room ID to the user
+  document.querySelector('#currentRoom').innerText = `Current room is ${roomId} - You are the caller!`;
+
+
+  // Add tracks from local stream to the PeerConnection
   localStream.getTracks().forEach(track => {
     peerConnection.addTrack(track, localStream);
   });
 
-  // Code for creating a room below
-
-  // Code for creating a room above
-
-  // Code for collecting ICE candidates below
-
-  // Code for collecting ICE candidates above
-
+  // Listen for remote tracks
   peerConnection.addEventListener('track', event => {
-    console.log('Got remote track:', event.streams[0]);
     event.streams[0].getTracks().forEach(track => {
-      console.log('Add a track to the remoteStream:', track);
       remoteStream.addTrack(track);
     });
   });
-
-  // Listening for remote session description below
-
-  // Listening for remote session description above
-
-  // Listen for remote ICE candidates below
-
-  // Listen for remote ICE candidates above
 }
 
+// Function to join an existing room
 function joinRoom() {
+  // Disable create and join buttons while joining the room
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
 
-  document.querySelector('#confirmJoinBtn').
-      addEventListener('click', async () => {
-        roomId = document.querySelector('#room-id').value;
-        console.log('Join room: ', roomId);
-        document.querySelector(
-            '#currentRoom').innerText = `Current room is ${roomId} - You are the callee!`;
-        await joinRoomById(roomId);
-      }, {once: true});
+  // Show room dialog to get the room ID from the user
+  document.querySelector('#confirmJoinBtn').addEventListener('click', async () => {
+    roomId = document.querySelector('#room-id').value;
+    document.querySelector('#currentRoom').innerText = `Current room is ${roomId} - You are the callee!`;
+    await joinRoomById(roomId);
+  }, {once: true});
   roomDialog.open();
 }
 
+// Function to join a room by ID
 async function joinRoomById(roomId) {
   const db = firebase.firestore();
-  const roomRef = db.collection('rooms').doc(`${roomId}`);
+  const roomRef = db.collection('rooms').doc(roomId);
   const roomSnapshot = await roomRef.get();
-  console.log('Got room:', roomSnapshot.exists);
 
   if (roomSnapshot.exists) {
-    console.log('Create PeerConnection with configuration: ', configuration);
+    // Create a new PeerConnection with default configuration
     peerConnection = new RTCPeerConnection(configuration);
+    // Register event listeners for PeerConnection
     registerPeerConnectionListeners();
+    // Add tracks from local stream to the PeerConnection
     localStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, localStream);
     });
 
-    // Code for collecting ICE candidates below
-
-    // Code for collecting ICE candidates above
-
+    // Listen for remote tracks
     peerConnection.addEventListener('track', event => {
-      console.log('Got remote track:', event.streams[0]);
       event.streams[0].getTracks().forEach(track => {
-        console.log('Add a track to the remoteStream:', track);
         remoteStream.addTrack(track);
       });
     });
-
-    // Code for creating SDP answer below
-
-    // Code for creating SDP answer above
-
-    // Listening for remote ICE candidates below
-
-    // Listening for remote ICE candidates above
   }
 }
 
-async function openUserMedia(e) {
-  const stream = await navigator.mediaDevices.getUserMedia(
-      {video: true, audio: true});
-  document.querySelector('#localVideo').srcObject = stream;
+// Function to open user's camera and microphone
+async function openUserMedia() {
+  const stream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
   localStream = stream;
   remoteStream = new MediaStream();
-  document.querySelector('#remoteVideo').srcObject = remoteStream;
 
-  console.log('Stream:', document.querySelector('#localVideo').srcObject);
+  // Display local video feed
+  document.querySelector('#localVideo').srcObject = localStream;
+  // Enable/disable buttons
   document.querySelector('#cameraBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = false;
   document.querySelector('#createBtn').disabled = false;
   document.querySelector('#hangupBtn').disabled = false;
 }
 
-async function hangUp(e) {
-  const tracks = document.querySelector('#localVideo').srcObject.getTracks();
-  tracks.forEach(track => {
-    track.stop();
-  });
-
+// Function to hang up the call and reset the application
+async function hangUp() {
+  // Stop all media tracks
+  localStream.getTracks().forEach(track => track.stop());
   if (remoteStream) {
     remoteStream.getTracks().forEach(track => track.stop());
   }
-
+  // Close the PeerConnection
   if (peerConnection) {
     peerConnection.close();
   }
-
+  // Reset UI elements
   document.querySelector('#localVideo').srcObject = null;
   document.querySelector('#remoteVideo').srcObject = null;
   document.querySelector('#cameraBtn').disabled = false;
@@ -168,8 +151,7 @@ async function hangUp(e) {
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#hangupBtn').disabled = true;
   document.querySelector('#currentRoom').innerText = '';
-
-  // Delete room on hangup
+  // Delete room if it exists
   if (roomId) {
     const db = firebase.firestore();
     const roomRef = db.collection('rooms').doc(roomId);
@@ -183,49 +165,40 @@ async function hangUp(e) {
     });
     await roomRef.delete();
   }
-
+  // Reload the page
   document.location.reload(true);
 }
 
+// Function to register event listeners for PeerConnection events
 function registerPeerConnectionListeners() {
   peerConnection.addEventListener('icegatheringstatechange', () => {
-    console.log(
-        `ICE gathering state changed: ${peerConnection.iceGatheringState}`);
+    console.log(`ICE gathering state changed: ${peerConnection.iceGatheringState}`);
   });
-
   peerConnection.addEventListener('connectionstatechange', () => {
     console.log(`Connection state change: ${peerConnection.connectionState}`);
   });
-
   peerConnection.addEventListener('signalingstatechange', () => {
     console.log(`Signaling state change: ${peerConnection.signalingState}`);
   });
-
-  peerConnection.addEventListener('iceconnectionstatechange ', () => {
-    console.log(
-        `ICE connection state change: ${peerConnection.iceConnectionState}`);
+  peerConnection.addEventListener('iceconnectionstatechange', () => {
+    console.log(`ICE connection state change: ${peerConnection.iceConnectionState}`);
   });
 }
+
+// Event listener for screen sharing button
 document.querySelector('#screenShareBtn').addEventListener('click', startScreenSharing);
 
+// Function to start screen sharing
 async function startScreenSharing() {
   try {
     const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    // Use screenStream for screen sharing
-    console.log('Screen sharing started');
-    
-    // Assuming you have a peer connection instance
     screenStream.getTracks().forEach(track => {
       peerConnection.addTrack(track, screenStream);
     });
-
-    // You can stop screen sharing when needed
-    // screenStream.getTracks().forEach(track => track.stop());
   } catch (error) {
     console.error('Error accessing screen:', error);
   }
 }
 
-// Your existing JavaScript code
-
+// Initialize the application
 init();
